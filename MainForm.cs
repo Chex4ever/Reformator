@@ -1,180 +1,197 @@
 using System;
-using System.Collections.Generic;
-using System.Data;
-using System.IO;
+using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
-using System.Xml;
-using System.Xml.Linq;
-using System.Xml.Xsl;
-
 namespace EmployeeSalaryProcessor
 {
     public partial class MainForm : Form
     {
+        private readonly XmlProcessor _xmlProcessor;
+        private TextBox? txtInputFile;
+        private TextBox? txtOutputFile;
+        private Button? btnBrowse;
+        private Button? btnProcess;
+        private Button? btnAddEmployee;
+        private DataGridView? dataGridView;
+        private List<string> _availableMonths = new List<string>();
+
         public MainForm()
         {
+            _xmlProcessor = new XmlProcessor("Data2.xml", "DataX_to_Employees_with_correction.xslt");
+            _xmlProcessor.MountErrorHandling = XmlProcessor.ErrorHandlingStrategy.KeepAsIs;
             InitializeComponent();
         }
 
-        private void btnProcess_Click(object sender, EventArgs e)
+        private void InitializeComponent()
+        {
+            SuspendLayout();
+            InitializeDataGridView();
+            InitializeButtons();
+            SetupForm();
+            ResumeLayout(false);
+        }
+
+        private void InitializeDataGridView()
+        {
+            dataGridView = new DataGridView
+            {
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                AllowUserToAddRows = false
+            };
+        }
+
+        private void InitializeButtons()
+        {
+            btnProcess = CreateButton("Запустить обработку", DockStyle.Bottom, btnProcess_Click);
+            btnAddEmployee = CreateButton("Добавить сотрудника", DockStyle.Bottom, btnAddEmployee_Click);
+        }
+
+        private Button CreateButton(string text, DockStyle dockStyle, EventHandler clickHandler)
+        {
+            return new Button
+            {
+                Text = text,
+                Dock = dockStyle,
+                Height = 40,
+                Margin = new Padding(3),
+                Font = new System.Drawing.Font("Segoe UI", 10F)
+            }.WithClickHandler(clickHandler);
+        }
+
+        private void SetupForm()
+        {
+            Text = "Обработка зарплат сотрудников - навороченый";
+            ClientSize = new System.Drawing.Size(1000, 600);
+            Padding = new Padding(10);
+
+            var tableLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                RowCount = 2,
+                ColumnCount = 1
+            };
+            tableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            tableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));
+
+            var buttonPanel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(5)
+            };
+
+            buttonPanel.Controls.Add(btnAddEmployee!);
+            buttonPanel.Controls.Add(btnProcess!);
+
+            btnAddEmployee!.Dock = DockStyle.Left;
+            btnAddEmployee.Width = 200;
+            btnProcess!.Dock = DockStyle.Right;
+            btnProcess.Width = 200;
+
+            tableLayout.Controls.Add(dataGridView!, 0, 0);
+            tableLayout.Controls.Add(buttonPanel, 0, 1);
+
+            Controls.Add(tableLayout);
+        }
+
+        private void btnProcess_Click(object? sender, EventArgs? e)
         {
             try
             {
-                // 1. XSLT преобразование
-                TransformXmlWithXslt();
-
-                // 2. Добавить сумму salary в Employee
-                AddTotalSalaryToEmployees();
-
-                // 3. Добавить общую сумму в Data1.xml
-                AddTotalAmountToData1();
-
-                // 4. Отобразить данные
+                ProcessData();
                 DisplayEmployeeData();
-
-                MessageBox.Show("Обработка завершена успешно!");
+                MessageBox.Show("Обработка завершена успешно!", "Информация",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка: {ex.Message}");
+                ShowError($"Ошибка обработки: {ex.Message}");
             }
         }
 
-        private void TransformXmlWithXslt()
+        private void ProcessData()
         {
-            XslCompiledTransform xslt = new XslCompiledTransform();
-            xslt.Load("Data1_to_Employees.xslt");
-            xslt.Transform("Data1.xml", "Employees_transformed.xml");
-        }
-
-        private void AddTotalSalaryToEmployees()
-        {
-            XDocument doc = XDocument.Load("Employees_transformed.xml");
-            
-            foreach (var employee in doc.Descendants("Employee"))
-            {
-                double total = 0;
-                foreach (var salary in employee.Descendants("salary"))
-                {
-                    string amountStr = salary.Attribute("amount")?.Value;
-                    if (!string.IsNullOrEmpty(amountStr))
-                    {
-                        amountStr = amountStr.Replace(",", ".");
-                        if (double.TryParse(amountStr, out double amount))
-                        {
-                            total += amount;
-                        }
-                    }
-                }
-                employee.SetAttributeValue("totalSalary", total.ToString("F2"));
-            }
-            
-            doc.Save("Employees_final.xml");
-        }
-
-        private void AddTotalAmountToData1()
-        {
-            XDocument doc = XDocument.Load("Data1.xml");
-            double total = 0;
-            
-            foreach (var item in doc.Descendants("item"))
-            {
-                string amountStr = item.Attribute("amount")?.Value;
-                if (!string.IsNullOrEmpty(amountStr))
-                {
-                    amountStr = amountStr.Replace(",", ".");
-                    if (double.TryParse(amountStr, out double amount))
-                    {
-                        total += amount;
-                    }
-                }
-            }
-            
-            var payElement = doc.Descendants("Pay").First();
-            payElement.SetAttributeValue("totalAmount", total.ToString("F2"));
-            
-            doc.Save("Data1_updated.xml");
+            _xmlProcessor.TransformXmlUniversal("Employees_transformed.xml");
+            _xmlProcessor.AddTotalSalaryToEmployees("Employees_transformed.xml", "Employees_final.xml");
+            _xmlProcessor.AddTotalAmountToData("Data1_updated.xml");
+            _availableMonths = _xmlProcessor.GetAllMonths("Employees_final.xml");
         }
 
         private void DisplayEmployeeData()
         {
+            if (dataGridView == null) return;
+
             dataGridView.Rows.Clear();
             dataGridView.Columns.Clear();
 
-            // Создаем колонки
             dataGridView.Columns.Add("Employee", "Сотрудник");
-            dataGridView.Columns.Add("January", "Январь");
-            dataGridView.Columns.Add("February", "Февраль");
-            dataGridView.Columns.Add("March", "Март");
-            dataGridView.Columns.Add("Total", "Всего");
+            dataGridView.Columns["Employee"].FillWeight = 20;
 
-            XDocument doc = XDocument.Load("Employees_final.xml");
-            
-            foreach (var employee in doc.Descendants("Employee"))
+            foreach (var month in _availableMonths)
             {
-                string name = employee.Attribute("name")?.Value;
-                string surname = employee.Attribute("surname")?.Value;
-                string totalSalary = employee.Attribute("totalSalary")?.Value;
-
-                Dictionary<string, string> monthlySalaries = new Dictionary<string, string>
+                var column = new DataGridViewTextBoxColumn
                 {
-                    {"january", ""},
-                    {"february", ""},
-                    {"march", ""}
+                    Name = month,
+                    HeaderText = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(month),
+                    FillWeight = 15
                 };
+                dataGridView.Columns.Add(column);
+            }
+            dataGridView.Columns.Add("Total", "Всего");
+            dataGridView.Columns["Total"].FillWeight = 15;
 
-                foreach (var salary in employee.Descendants("salary"))
+            var employees = _xmlProcessor.GetEmployeeDisplayData("Employees_final.xml");
+
+            foreach (var employee in employees)
+            {
+                var rowData = new List<object> { employee.FullName };
+                foreach (var month in _availableMonths)
                 {
-                    string month = salary.Attribute("mount")?.Value;
-                    string amount = salary.Attribute("amount")?.Value;
-                    
-                    if (monthlySalaries.ContainsKey(month))
-                    {
-                        monthlySalaries[month] = amount;
-                    }
+                    rowData.Add(employee.MonthlySalaries.TryGetValue(month, out var salary)
+                    ? salary : "0");
+                }
+                rowData.Add(employee.TotalSalary);
+                dataGridView.Rows.Add(rowData.ToArray());
+            }
+            dataGridView.AutoResizeColumns();
+        }
+
+        private void btnAddEmployee_Click(object? sender, EventArgs? e)
+        {
+            try
+            {
+                if (!_availableMonths.Any())
+                {
+                    _availableMonths = _xmlProcessor.GetAllMonths("Data1.xml");
                 }
 
-                dataGridView.Rows.Add(
-                    $"{name} {surname}",
-                    monthlySalaries["january"],
-                    monthlySalaries["february"],
-                    monthlySalaries["march"],
-                    totalSalary
-                );
+                using (var form = new AddEmployeeForm(_availableMonths))
+                {
+                    if (form.ShowDialog() == DialogResult.OK && form.EmployeeData != null)
+                    {
+                        _xmlProcessor.AddEmployeeToData(form.EmployeeData);
+                        btnProcess_Click(null, null);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowError($"Ошибка добавления сотрудника: {ex.Message}");
             }
         }
 
-        // Код для дизайнера формы
-        private DataGridView dataGridView;
-        private Button btnProcess;
-
-        private void InitializeComponent()
+        private void ShowError(string message)
         {
-            this.dataGridView = new DataGridView();
-            this.btnProcess = new Button();
-            ((System.ComponentModel.ISupportInitialize)(this.dataGridView)).BeginInit();
-            this.SuspendLayout();
-            
-            // dataGridView
-            this.dataGridView.Dock = DockStyle.Top;
-            this.dataGridView.Height = 300;
-            this.dataGridView.ReadOnly = true;
-            
-            // btnProcess
-            this.btnProcess.Text = "Запустить обработку";
-            this.btnProcess.Dock = DockStyle.Bottom;
-            this.btnProcess.Height = 40;
-            this.btnProcess.Click += new EventHandler(this.btnProcess_Click);
-            
-            // MainForm
-            this.Text = "Обработка зарплат сотрудников";
-            this.ClientSize = new System.Drawing.Size(600, 400);
-            this.Controls.Add(this.dataGridView);
-            this.Controls.Add(this.btnProcess);
-            
-            ((System.ComponentModel.ISupportInitialize)(this.dataGridView)).EndInit();
-            this.ResumeLayout(false);
+            MessageBox.Show(message, "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+    public static class ControlExtensions
+    {
+        public static T WithClickHandler<T>(this T control, EventHandler handler) where T : Control
+        {
+            control.Click += handler;
+            return control;
         }
     }
 }
