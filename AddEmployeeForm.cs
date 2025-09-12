@@ -1,206 +1,290 @@
-using System;
 using System.Globalization;
-using System.Windows.Forms;
+using Microsoft.Extensions.Options;
 
-namespace EmployeeSalaryProcessor
+namespace EmployeeSalaryProcessor;
+
+public partial class AddEmployeeForm : Form
 {
-    public partial class AddEmployeeForm : Form
+    private readonly XmlProcessor _xmlProcessor;
+    private readonly AppConfig _config;
+    public EmployeeData? EmployeeData { get; private set; }
+    private List<string> _availableMonths = [];
+    private TableLayoutPanel tableLayoutSalaries = null!;
+    private TextBox txtName = null!;
+    private TextBox txtSurname = null!;
+    private Button btnAdd = null!;
+    private Button btnCancel = null!;
+    private Dictionary<string, NumericUpDown> _salaryControls = [];
+
+    public AddEmployeeForm(IOptions<AppConfig> config, XmlProcessor xmlProcessor)
     {
-        public EmployeeData? EmployeeData { get; private set; }
+        _xmlProcessor = xmlProcessor;
+        _config = config.Value;
+        InitializeComponent();
+    }
 
-        private readonly List<string> _availableMonths;
+    private void InitializeComponent()
+    {
+        SuspendLayout();
+        InitializeControls();
+        SetupForm();
+        ResumeLayout(false);
+    }
 
-        private TextBox? txtName;
-        private TextBox? txtSurname;
-        private TableLayoutPanel? tableLayoutSalaries;
-        private Button? btnAdd;
-        private Button? btnCancel;
-        private Dictionary<string, NumericUpDown> _salaryControls = new Dictionary<string, NumericUpDown>();
-
-        public AddEmployeeForm(List<string> availableMonths)
+    private void InitializeControls()
+    {
+        txtName = new TextBox
         {
-            _availableMonths = availableMonths;
-            InitializeComponent();
-        }
-
-        private void InitializeComponent()
+            PlaceholderText = _config.Labels.Name,
+            Margin = new Padding(_config.AppSettings.PaddingSize / 2),
+            Font = new Font(_config.AppSettings.DefaultFontName, _config.AppSettings.DefaultFontSize),
+            Width = 200
+        };
+        txtSurname = new TextBox
         {
-            SuspendLayout();
-            InitializeControls();
-            SetupForm();
-            ResumeLayout(false);
-        }
+            PlaceholderText = _config.Labels.Surname,
+            Margin = new Padding(_config.AppSettings.PaddingSize / 2),
+            Font = new Font(_config.AppSettings.DefaultFontName, _config.AppSettings.DefaultFontSize),
+            Width = 200
+        };
 
-        private void InitializeControls()
+        tableLayoutSalaries = new TableLayoutPanel()
         {
-            txtName = CreateTextBox("Имя");
-            txtSurname = CreateTextBox("Фамилия");
+            AutoScroll = true,
+            ColumnCount = 2,
+            Padding = new Padding(5)
+        };
 
-            tableLayoutSalaries = new TableLayoutPanel()
+        InitializeSalaryControls();
+
+        btnAdd = new Button
+        {
+            Text = _config.Labels.Add,
+            DialogResult = DialogResult.OK,
+            Margin = new Padding(_config.AppSettings.PaddingSize / 2),
+            Font = new Font(_config.AppSettings.DefaultFontName, _config.AppSettings.DefaultFontSize),
+            Width = 100
+        };
+        btnAdd.Click += BtnAdd_Click;
+
+        btnCancel = new Button
+        {
+            Text = _config.Labels.Cancel,
+            DialogResult = DialogResult.Cancel,
+            Margin = new Padding(_config.AppSettings.PaddingSize / 2),
+            Font = new Font(_config.AppSettings.DefaultFontName, _config.AppSettings.DefaultFontSize),
+            Width = 100
+        };
+
+    }
+
+    private void InitializeSalaryControls()
+    {
+        if (tableLayoutSalaries == null) return;
+
+        tableLayoutSalaries.Controls.Clear();
+        _salaryControls.Clear();
+
+        tableLayoutSalaries.RowCount = _availableMonths.Count;
+        for (int i = 0; i < _availableMonths.Count; i++)
+        {
+            var month = _availableMonths[i];
+            var label = new Label
             {
-                AutoScroll = true,
-                ColumnCount = 2,
-                Padding = new Padding(5)
+                Text = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(month) + ":",
+                TextAlign = ContentAlignment.MiddleRight,
+                Margin = new Padding(_config.AppSettings.PaddingSize / 2),
+                Font = new Font(_config.AppSettings.DefaultFontName, _config.AppSettings.DefaultFontSize),
+
+            };
+            var numericUpDown = new NumericUpDown
+            {
+                Minimum = _config.AppSettings.MinSalary,
+                Maximum = _config.AppSettings.MaxSalary,
+                DecimalPlaces = _config.AppSettings.DecimalPlaces,
+                Margin = new Padding(_config.AppSettings.PaddingSize / 2),
+                Font = new Font(_config.AppSettings.DefaultFontName, _config.AppSettings.DefaultFontSize),
+                Width = 120,
+                Tag = month
             };
 
-            InitializeSalaryControls();
+            tableLayoutSalaries.Controls.Add(label, 0, i);
+            tableLayoutSalaries.Controls.Add(numericUpDown, 1, i);
 
-            btnAdd = CreateButton("Добавить", DialogResult.OK);
-            btnCancel = CreateButton("Отмена", DialogResult.Cancel);
-
-            btnAdd.Click += btnAdd_Click;
+            _salaryControls[month] = numericUpDown;
         }
+    }
 
-        private void InitializeSalaryControls()
+    private void SetupForm()
+    {
+        Text = _config.Titles.AddEmployee;
+        ClientSize = new Size(400, 500);
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        StartPosition = FormStartPosition.CenterParent;
+        Padding = new Padding(_config.AppSettings.PaddingSize);
+
+        var tableLayout = new TableLayoutPanel
         {
-            if (tableLayoutSalaries == null) return;
-            tableLayoutSalaries.RowCount = _availableMonths.Count;
-            for (int i = 1; i < _availableMonths.Count; i++)
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 4,
+            Padding = new Padding(_config.AppSettings.PaddingSize / 2)
+        };
+
+        AddControlsToTable(tableLayout);
+        Controls.Add(tableLayout);
+
+        AcceptButton = btnAdd;
+        CancelButton = btnCancel;
+    }
+
+    private void AddControlsToTable(TableLayoutPanel tableLayout)
+    {
+        tableLayout.Controls.Add(new Label
+        {
+            Text = $"{_config.Labels.Name}:",
+            TextAlign = ContentAlignment.MiddleRight,
+            Font = new Font(_config.AppSettings.DefaultFontName, _config.AppSettings.DefaultFontSize),
+        }, 0, 0);
+        tableLayout.Controls.Add(txtName, 1, 0);
+
+        tableLayout.Controls.Add(new Label
+        {
+            Text = $"{_config.Labels.Surname}:",
+            TextAlign = ContentAlignment.MiddleRight,
+            Font = new Font(_config.AppSettings.DefaultFontName, _config.AppSettings.DefaultFontSize),
+        }, 0, 1);
+        tableLayout.Controls.Add(txtSurname, 1, 1);
+
+        tableLayout.Controls.Add(new Label
+        {
+            Text = $"{_config.Labels.Payments}:",
+            TextAlign = ContentAlignment.MiddleRight,
+            Font = new Font(_config.AppSettings.DefaultFontName, _config.AppSettings.DefaultFontSize),
+        }, 0, 2);
+
+        var scrollPanel = new Panel
+        {
+            AutoScroll = true,
+            Height = 200,
+            BorderStyle = BorderStyle.FixedSingle,
+            Dock = DockStyle.Fill
+        };
+
+        scrollPanel.Controls.Add(tableLayoutSalaries);
+        tableLayoutSalaries.Dock = DockStyle.Fill;
+
+        tableLayout.Controls.Add(scrollPanel, 1, 2);
+
+        var buttonPanel = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            Margin = new Padding(0, 10, 0, 0)
+        };
+        buttonPanel.Controls.Add(btnCancel);
+        buttonPanel.Controls.Add(btnAdd);
+
+        tableLayout.Controls.Add(buttonPanel, 0, 3);
+        tableLayout.SetColumnSpan(buttonPanel, 2);
+    }
+
+    private void BtnAdd_Click(object? sender, EventArgs? e)
+    {
+        if (ValidateInput())
+        {
+            EmployeeData = new EmployeeData
             {
-                var month = _availableMonths[i];
-                var label = new Label
+                Name = txtName?.Text ?? string.Empty,
+                Surname = txtSurname?.Text ?? string.Empty,
+                Salaries = _salaryControls.Select(x => new MonthSalary
                 {
-                    Text = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(month) + ":",
-                    TextAlign = System.Drawing.ContentAlignment.MiddleRight,
-                    Margin = new Padding(5),
-                    Font = new System.Drawing.Font("Segoe UI", 10F)
-                };
-                var numericUpDown = new NumericUpDown
+                    Month = x.Key,
+                    Amount = x.Value.Value
+                }).ToList()
+            };
+        }
+        else
+        {
+            DialogResult = DialogResult.None;
+        }
+    }
+
+    private bool ValidateInput()
+    {
+        if (string.IsNullOrWhiteSpace(txtName?.Text))
+        {
+            MessageBox.Show(
+                _config.Messages.EmployeeNameRequired,
+                _config.Titles.Error,
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning
+                );
+            txtName?.Focus();
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(txtSurname?.Text))
+        {
+            MessageBox.Show(
+                _config.Messages.EmployeeSurnameRequired,
+                _config.Titles.Error,
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            txtSurname?.Focus();
+            return false;
+        }
+
+        bool hasSalary = _salaryControls.Values.Any(nud => nud.Value > 0);
+        if (!hasSalary)
+        {
+            MessageBox.Show(
+                _config.Messages.SalaryRequired,
+                _config.Titles.Error,
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning
+            );
+            return false;
+        }
+
+        return true;
+    }
+    public void SetAvailableMonths(List<string> months)
+    {
+        if (months == null) return;
+
+        _availableMonths = months;
+        InitializeSalaryControls();
+    }
+    public void UpdateAvailableMonths(List<string> newMonths)
+    {
+        if (newMonths == null) return;
+
+        _availableMonths.Clear();
+        _availableMonths.AddRange(newMonths);
+        InitializeSalaryControls();
+    }
+    public void PrefillData(string name, string surname, List<MonthSalary>? salaries = null)
+    {
+        txtName.Text = name;
+        txtSurname.Text = surname;
+
+        if (salaries != null)
+        {
+            foreach (var salary in salaries)
+            {
+                if (_salaryControls.ContainsKey(salary.Month))
                 {
-                    Minimum = 0,
-                    Maximum = 1000000,
-                    DecimalPlaces = 2,
-                    Margin = new Padding(5),
-                    Font = new System.Drawing.Font("Segoe UI", 10F),
-                    Tag = month
-                };
-
-                tableLayoutSalaries.Controls.Add(label, 0, i);
-                tableLayoutSalaries.Controls.Add(numericUpDown, 1, i);
-
-                _salaryControls[month] = numericUpDown;
+                    _salaryControls[salary.Month].Value = salary.Amount;
+                }
             }
         }
-
-        private TextBox CreateTextBox(string placeholder)
-        {
-            return new TextBox
-            {
-                PlaceholderText = placeholder,
-                Margin = new Padding(5),
-                Font = new System.Drawing.Font("Segoe UI", 10F)
-            };
-        }
-
-        private Button CreateButton(string text, DialogResult dialogResult)
-        {
-            return new Button
-            {
-                Text = text,
-                DialogResult = dialogResult,
-                Margin = new Padding(5),
-                Font = new System.Drawing.Font("Segoe UI", 10F),
-                Width = 100
-            };
-        }
-
-        private void SetupForm()
-        {
-            Text = "Добавить сотрудника";
-            ClientSize = new System.Drawing.Size(300, 300);
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
-            MinimizeBox = false;
-            StartPosition = FormStartPosition.CenterParent;
-
-            var tableLayout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                RowCount = 4,
-                Padding = new Padding(10)
-            };
-
-            AddControlsToTable(tableLayout);
-            Controls.Add(tableLayout);
-
-            AcceptButton = btnAdd;
-            CancelButton = btnCancel;
-        }
-
-        private void AddControlsToTable(TableLayoutPanel tableLayout)
-        {
-            tableLayout.Controls.Add(new Label { Text = "Имя:", TextAlign = System.Drawing.ContentAlignment.MiddleRight }, 0, 0);
-            tableLayout.Controls.Add(txtName!, 1, 0);
-            
-            tableLayout.Controls.Add(new Label { Text = "Фамилия:", TextAlign = System.Drawing.ContentAlignment.MiddleRight }, 0, 1);
-            tableLayout.Controls.Add(txtSurname!, 1, 1);
-            
-            tableLayout.Controls.Add(new Label { Text = "Зарплаты:", TextAlign = System.Drawing.ContentAlignment.MiddleRight }, 0, 2);
-            var scrollPanel = new Panel
-            {
-                AutoScroll = true,
-                Height = 200,
-                BorderStyle = BorderStyle.FixedSingle
-            };
-            scrollPanel.Controls.Add(tableLayoutSalaries!);
-            tableLayoutSalaries!.Dock = DockStyle.Fill;
-
-            tableLayout.Controls.Add(scrollPanel, 1, 2);
-
-            var buttonPanel = new FlowLayoutPanel
-            {
-                FlowDirection = FlowDirection.RightToLeft,
-                AutoSize = true,
-                Margin = new Padding(0, 10, 0, 0)
-            };
-            buttonPanel.Controls.Add(btnCancel!);
-            buttonPanel.Controls.Add(btnAdd!);
-
-            tableLayout.Controls.Add(buttonPanel, 0, 3);
-            tableLayout.SetColumnSpan(buttonPanel, 2);
-        }
-
-        private void btnAdd_Click(object? sender, EventArgs? e)
-        {
-            if (ValidateInput())
-            {
-                EmployeeData = new EmployeeData
-                {
-                    Name = txtName?.Text ?? string.Empty,
-                    Surname = txtSurname?.Text ?? string.Empty,
-                    Salaries = _salaryControls.Select(x => new MonthSalary
-                    {
-                        Month = x.Key,
-                        Amount = x.Value.Value
-                    }).ToList()
-                };
-            }
-            else
-            {
-                DialogResult = DialogResult.None;
-            }
-        }
-
-        private bool ValidateInput()
-        {
-            if (string.IsNullOrWhiteSpace(txtName?.Text))
-            {
-                MessageBox.Show("Введите имя сотрудника", "Ошибка", 
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtName?.Focus();
-                return false;
-            }
-            
-            if (string.IsNullOrWhiteSpace(txtSurname?.Text))
-            {
-                MessageBox.Show("Введите фамилию сотрудника", "Ошибка", 
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtSurname?.Focus();
-                return false;
-            }
-            
-            return true;
-        }
+    }
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        base.OnFormClosing(e);
+        btnAdd.Click -= BtnAdd_Click;
     }
 }
