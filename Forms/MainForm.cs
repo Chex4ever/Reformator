@@ -257,7 +257,6 @@ public partial class MainForm : Form
             using var scope = _serviceProvider.CreateScope();
             var form = scope.ServiceProvider.GetRequiredService<AddPaymentForm>();
 
-            form.SetAvailableMonths(_employeeDataService.AvailableMonths);
             if (form.ShowDialog() == DialogResult.OK && form.EmployeeData != null)
             {
                 _xmlProcessor.AddPaymentToData(txtInputFile?.Text ?? "", form.EmployeeData);
@@ -317,12 +316,10 @@ public partial class MainForm : Form
     {
         try
         {
-            // Показываем индикатор загрузки (опционально)
             Cursor = Cursors.WaitCursor;
             btnProcess.Enabled = false;
             btnAddPayment.Enabled = false;
 
-            // Перезапускаем обработку данных
             await ProcessDataAsync();
         }
         catch (Exception ex)
@@ -340,39 +337,39 @@ public partial class MainForm : Form
 
     private async Task ProcessDataAsync()
     {
-        AppLogger.LogDebug("ProcessDataAsync started");
+        AppLogger.LogDebug(this, "ProcessDataAsync started");
         if (string.IsNullOrEmpty(txtInputFile?.Text) || !File.Exists(txtInputFile.Text) ||
             string.IsNullOrEmpty(txtXsltFile?.Text) || !File.Exists(txtXsltFile.Text))
         {
-            AppLogger.LogWarning("ProcessDataAsync: Input files are missing or invalid");
+            AppLogger.LogWarning(this, "ProcessDataAsync: Input files are missing or invalid");
             return;
         }
 
         try
         {
-            AppLogger.LogDebug("Starting XML transformation");
+            AppLogger.LogDebug(this, "Starting XML transformation");
             _xmlProcessor.TransformXml(txtInputFile.Text, txtXsltFile.Text, txtOutputFile!.Text);
-            AppLogger.LogDebug("XML transformation completed");
+            AppLogger.LogDebug(this, "XML transformation completed");
 
             _xmlProcessor.AddTotalSalaryToEmployees(txtOutputFile.Text);
-            AppLogger.LogDebug("Total salaries added");
+            AppLogger.LogDebug(this, "Total salaries added");
 
             var months = _xmlProcessor.GetAllMonths(txtOutputFile.Text);
-            AppLogger.LogDebug($"Found {months.Count} months: {string.Join(", ", months)}");
+            AppLogger.LogDebug(this, $"Found {months.Count} months: {string.Join(", ", months)}");
 
             _employeeDataService.UpdateAvailableMonths(months);
-            AppLogger.LogDebug("Employee data displayed");
+            AppLogger.LogDebug(this, "Employee data displayed");
 
             await DisplayEmployeeDataAsync(txtOutputFile.Text);
 
             _isDataLoaded = true;
             UpdateButtonStates();
 
-            AppLogger.LogInformation("Processing completed successfully");
+            AppLogger.LogInfo(this, "Processing completed successfully");
         }
         catch (Exception ex)
         {
-            AppLogger.LogError("ProcessDataAsync failed", ex);
+            AppLogger.LogError(this, "ProcessDataAsync failed", ex);
             _isDataLoaded = false;
             UpdateButtonStates();
 
@@ -383,11 +380,11 @@ public partial class MainForm : Form
 
     private async Task DisplayEmployeeDataAsync(string filePath)
     {
-        AppLogger.LogDebug($"DisplayEmployeeDataAsync started for file: {filePath}");
+        AppLogger.LogDebug(this, $"DisplayEmployeeDataAsync started for file: {filePath}");
 
         if (dataGridView == null)
         {
-            AppLogger.LogWarning("DisplayEmployeeDataAsync: dataGridView is null");
+            AppLogger.LogWarning(this, "DisplayEmployeeDataAsync: dataGridView is null");
             return;
         }
 
@@ -395,17 +392,16 @@ public partial class MainForm : Form
         {
             try
             {
-                AppLogger.LogDebug("Loading employee display data");
+                AppLogger.LogDebug(this, "Loading employee display data");
                 var employees = _xmlProcessor.GetEmployeeDisplayData(filePath);
-                AppLogger.LogDebug($"Loaded {employees.Count()} employees");
+                AppLogger.LogDebug(this, $"Loaded {employees.Count()} employees");
 
-                // Логируем данные каждого сотрудника
                 foreach (var employee in employees)
                 {
-                    AppLogger.LogDebug($"Employee: {employee.FullName}, Total: {employee.TotalSalary}");
+                    AppLogger.LogDebug(this, $"Employee: {employee.FullName}, Total: {employee.TotalSalary}");
                     foreach (var monthly in employee.MonthlySalaries)
                     {
-                        AppLogger.LogDebug($"  {monthly.Key}: {monthly.Value}");
+                        AppLogger.LogDebug(this, $"  {monthly.Key}: {monthly.Value}");
                     }
                 }
 
@@ -413,16 +409,15 @@ public partial class MainForm : Form
                 {
                     try
                     {
-                        AppLogger.LogDebug("Updating UI controls");
+                        AppLogger.LogDebug(this, "Updating UI controls");
 
                         dataGridView.Rows.Clear();
                         dataGridView.Columns.Clear();
 
-                        // Создаем колонки
                         dataGridView.Columns.Add("Employee", _config.Labels.ColumnEmployee);
                         dataGridView.Columns["Employee"]!.FillWeight = 20;
 
-                        AppLogger.LogDebug($"Adding {_employeeDataService.AvailableMonths.Count} month columns");
+                        AppLogger.LogDebug(this, $"Adding {_employeeDataService.AvailableMonths.Count} month columns");
                         foreach (var month in _employeeDataService.AvailableMonths)
                         {
                             var column = new DataGridViewTextBoxColumn
@@ -437,8 +432,7 @@ public partial class MainForm : Form
                         dataGridView.Columns.Add("Total", _config.Labels.ColumnTotal);
                         dataGridView.Columns["Total"]!.FillWeight = 15;
 
-                        // Добавляем данные
-                        AppLogger.LogDebug($"Adding {employees.Count()} rows to grid");
+                        AppLogger.LogDebug(this, $"Adding {employees.Count()} rows to grid");
                         foreach (var employee in employees)
                         {
                             var rowData = new List<object> { employee.FullName };
@@ -448,12 +442,12 @@ public partial class MainForm : Form
                                 if (employee.MonthlySalaries.TryGetValue(month, out var salary))
                                 {
                                     rowData.Add(salary);
-                                    AppLogger.LogDebug($"  {employee.FullName} - {month}: {salary}");
+                                    AppLogger.LogDebug(this, $"  {employee.FullName} - {month}: {salary}");
                                 }
                                 else
                                 {
                                     rowData.Add("0");
-                                    AppLogger.LogDebug($"  {employee.FullName} - {month}: 0 (not found)");
+                                    AppLogger.LogDebug(this, $"  {employee.FullName} - {month}: 0 (not found)");
                                 }
                             }
 
@@ -462,18 +456,18 @@ public partial class MainForm : Form
                         }
 
                         dataGridView.AutoResizeColumns();
-                        AppLogger.LogDebug("UI update completed successfully");
+                        AppLogger.LogDebug(this, "UI update completed successfully");
                     }
                     catch (Exception ex)
                     {
-                        AppLogger.LogError("UI update failed", ex);
+                        AppLogger.LogError(this, "UI update failed", ex);
                         throw;
                     }
                 });
             }
             catch (Exception ex)
             {
-                AppLogger.LogError("Background data loading failed", ex);
+                AppLogger.LogError(this, "Background data loading failed", ex);
                 throw;
             }
         });

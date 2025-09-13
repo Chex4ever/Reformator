@@ -25,7 +25,6 @@ internal static class Program
         var mainForm = scope.ServiceProvider.GetRequiredService<MainForm>();
         var loggerFactory = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();
         AppLogger.Initialize(loggerFactory);
-        AppLogger.LogInformation("Application started");
         Application.Run(mainForm);
     }
 

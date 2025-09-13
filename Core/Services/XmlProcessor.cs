@@ -92,20 +92,19 @@ public class XmlProcessor(IOptions<AppConfig> config) : IXmlProcessor
     public void AddPaymentToData(string xmlFilePath, EmployeeData employeeData)
     {
         ValidateAndEnsureFileDirectory(xmlFilePath, nameof(xmlFilePath));
-        if (employeeData == null)
-            throw new ArgumentNullException(nameof(employeeData));
+        ArgumentNullException.ThrowIfNull(employeeData);
         try
         {
             XDocument doc = XDocument.Load(xmlFilePath);
-            var payElement = doc.Descendants("Pay").First();
-            if (payElement == null)
-            {
-                throw new InvalidOperationException("Pay element not found in XML file");
-            }
-
+            var payElement = doc.Descendants("Pay").First() ?? throw new InvalidOperationException("Pay element not found in XML file");
             foreach (var salary in employeeData.Salaries)
             {
                 if (salary.Amount == 0) continue;
+                if (PaymentExists(xmlFilePath, employeeData.Name, employeeData.Surname, salary.Month))
+                {
+                    AppLogger.LogDebug(this, $"Payment already exists: {employeeData.Name}, {employeeData.Surname}, {salary.Month}");
+                }
+
                 payElement.Add(new XElement("item",
                     new XAttribute("name", employeeData.Name),
                     new XAttribute("surname", employeeData.Surname),
@@ -124,7 +123,7 @@ public class XmlProcessor(IOptions<AppConfig> config) : IXmlProcessor
 
     public List<EmployeeDisplayData> GetEmployeeDisplayData(string xmlFilePath)
     {
-        AppLogger.LogDebug($"GetEmployeeDisplayData started for: {xmlFilePath}");
+        AppLogger.LogDebug(this, $"GetEmployeeDisplayData started for: {xmlFilePath}");
 
         ValidateAndEnsureFileDirectory(xmlFilePath, nameof(xmlFilePath));
         try
@@ -139,7 +138,7 @@ public class XmlProcessor(IOptions<AppConfig> config) : IXmlProcessor
                 .OrderBy(m => m)
                 .ToList();
 
-            AppLogger.LogDebug($"Found {allMonths.Count} unique months");
+            AppLogger.LogDebug(this, $"Found {allMonths.Count} unique months");
 
             foreach (var employee in doc.Descendants("Employee"))
             {
@@ -147,7 +146,7 @@ public class XmlProcessor(IOptions<AppConfig> config) : IXmlProcessor
                 string surname = employee.Attribute("surname")?.Value ?? "Unknown";
                 string totalSalary = employee.Attribute("totalSalary")?.Value ?? "0";
 
-                AppLogger.LogDebug($"Processing employee: {name} {surname}");
+                AppLogger.LogDebug(this, $"Processing employee: {name} {surname}");
 
                 var monthlySalaries = allMonths.ToDictionary(
                     month => month ?? throw new InvalidOperationException("allMonths.ToDictionary error"),
@@ -158,7 +157,7 @@ public class XmlProcessor(IOptions<AppConfig> config) : IXmlProcessor
 
                 foreach (var monthSalary in monthlySalaries)
                 {
-                    AppLogger.LogDebug($"  {monthSalary.Key}: {monthSalary.Value}");
+                    AppLogger.LogDebug(this, $"  {monthSalary.Key}: {monthSalary.Value}");
                 }
                 employees.Add(new EmployeeDisplayData
                 {
@@ -167,12 +166,12 @@ public class XmlProcessor(IOptions<AppConfig> config) : IXmlProcessor
                     TotalSalary = totalSalary
                 });
             }
-            AppLogger.LogDebug($"GetEmployeeDisplayData completed: {employees.Count} employees");
+            AppLogger.LogDebug(this, $"GetEmployeeDisplayData completed: {employees.Count} employees");
             return employees;
         }
         catch (Exception ex)
         {
-            AppLogger.LogError("GetEmployeeDisplayData failed", ex);
+            AppLogger.LogError(this, "GetEmployeeDisplayData failed", ex);
 
             throw new InvalidOperationException($"Failed to get employee data: {ex.Message}", ex);
         }
@@ -252,5 +251,23 @@ public class XmlProcessor(IOptions<AppConfig> config) : IXmlProcessor
 
         FileSystemHelper.EnsureDirectoryExists(filePath);
     }
+    public bool PaymentExists(string xmlFilePath, string name, string surname, string month)
+    {
+        ValidateAndEnsureFileDirectory(xmlFilePath, nameof(xmlFilePath));
 
+        try
+        {
+            XDocument doc = XDocument.Load(xmlFilePath);
+
+            return doc.Descendants("item")
+                .Any(item =>
+                    item.Attribute("name")?.Value == name &&
+                    item.Attribute("surname")?.Value == surname &&
+                    item.Attribute("mount")?.Value == month);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to check payment existence: {ex.Message}", ex);
+        }
+    }
 }

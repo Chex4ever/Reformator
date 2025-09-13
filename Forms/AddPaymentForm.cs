@@ -2,6 +2,7 @@ using System.Globalization;
 using EmployeeSalaryProcessor.Core.Contracts;
 using EmployeeSalaryProcessor.Core.Entities;
 using EmployeeSalaryProcessor.Core.Services;
+using EmployeeSalaryProcessor.Core.Utilities;
 using Microsoft.Extensions.Options;
 
 namespace EmployeeSalaryProcessor.Forms;
@@ -46,8 +47,7 @@ public partial class AddPaymentForm : Form
             Margin = new Padding(_config.AppSettings.PaddingSize / 2),
             Font = new Font(_config.AppSettings.DefaultFontName, _config.AppSettings.DefaultFontSize),
             Width = 250,
-            DisplayMember = "FullName"
-
+            DisplayMember = "FullName",
         };
         cmbEmployees.SelectedIndexChanged += CmbEmployees_SelectedIndexChanged;
 
@@ -228,78 +228,101 @@ public partial class AddPaymentForm : Form
     private void SetupForm()
     {
         Text = _config.Titles.AddPayment;
-        ClientSize = new Size(400, 500);
+        ClientSize = new Size(500, 600);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
         Padding = new Padding(_config.AppSettings.PaddingSize);
-
-        var tableLayout = new TableLayoutPanel
+        var mainPanel = new Panel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 4,
-            Padding = new Padding(_config.AppSettings.PaddingSize / 2)
+            Padding = new Padding(_config.AppSettings.PaddingSize)
         };
 
-        AddControlsToTable(tableLayout);
-        Controls.Add(tableLayout);
-
-        AcceptButton = btnAdd;
-        CancelButton = btnCancel;
-    }
-
-    private void AddControlsToTable(TableLayoutPanel tableLayout)
-    {
-        tableLayout.Controls.Add(new Label
+        var headerPanel = new Panel
         {
-            Text = $"{_config.Labels.Name}:",
-            TextAlign = ContentAlignment.MiddleRight,
-            Font = new Font(_config.AppSettings.DefaultFontName, _config.AppSettings.DefaultFontSize),
-        }, 0, 0);
-        tableLayout.Controls.Add(txtName, 1, 0);
+            Dock = DockStyle.Top,
+            Height = 80,
+            Padding = new Padding(_config.AppSettings.PaddingSize)
+        };
 
-        tableLayout.Controls.Add(new Label
-        {
-            Text = $"{_config.Labels.Surname}:",
-            TextAlign = ContentAlignment.MiddleRight,
-            Font = new Font(_config.AppSettings.DefaultFontName, _config.AppSettings.DefaultFontSize),
-        }, 0, 1);
-        tableLayout.Controls.Add(txtSurname, 1, 1);
+        cmbEmployees.Dock = DockStyle.Top;
+        cmbEmployees.Height = 30;
 
-        tableLayout.Controls.Add(new Label
-        {
-            Text = $"{_config.Labels.Payments}:",
-            TextAlign = ContentAlignment.MiddleRight,
-            Font = new Font(_config.AppSettings.DefaultFontName, _config.AppSettings.DefaultFontSize),
-        }, 0, 2);
+        btnAddMonth.Dock = DockStyle.Bottom;
+        btnAddMonth.Height = 30;
 
-        var scrollPanel = new Panel
+        headerPanel.Controls.Add(cmbEmployees);
+        headerPanel.Controls.Add(btnAddMonth);
+
+        var contentPanel = new Panel
         {
-            AutoScroll = true,
-            Height = 200,
-            BorderStyle = BorderStyle.FixedSingle,
             Dock = DockStyle.Fill
         };
 
-        scrollPanel.Controls.Add(tableLayoutSalaries);
-        tableLayoutSalaries.Dock = DockStyle.Fill;
+        var inputTable = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 80,
+            ColumnCount = 2,
+            RowCount = 2,
+            Padding = new Padding(_config.AppSettings.PaddingSize / 2)
+        };
+        inputTable.Controls.Add(new Label { Text = $"{_config.Labels.Name}:", TextAlign = ContentAlignment.MiddleRight }, 0, 0);
+        inputTable.Controls.Add(txtName, 1, 0);
+        inputTable.Controls.Add(new Label { Text = $"{_config.Labels.Surname}:", TextAlign = ContentAlignment.MiddleRight }, 0, 1);
+        inputTable.Controls.Add(txtSurname, 1, 1);
 
-        tableLayout.Controls.Add(scrollPanel, 1, 2);
+        var salariesPanel = new GroupBox
+        {
+            Text = "Зарплаты по месяцам",
+            Dock = DockStyle.Fill,
+            Margin = new Padding(_config.AppSettings.PaddingSize / 2)
+        };
+
+        var scrollPanel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            Padding = new Padding(_config.AppSettings.PaddingSize / 2)
+        };
+
+        tableLayoutSalaries.Dock = DockStyle.Top;
+        tableLayoutSalaries.AutoSize = true;
+        tableLayoutSalaries.ColumnCount = 2;
+        tableLayoutSalaries.Width = salariesPanel.Width - 40;
+
+        scrollPanel.Controls.Add(tableLayoutSalaries);
+        salariesPanel.Controls.Add(scrollPanel);
+
+        var footerPanel = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 50,
+            Padding = new Padding(_config.AppSettings.PaddingSize / 2)
+        };
 
         var buttonPanel = new FlowLayoutPanel
         {
-            FlowDirection = FlowDirection.RightToLeft,
-            AutoSize = true,
-            Margin = new Padding(0, 10, 0, 0)
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft
         };
+
         buttonPanel.Controls.Add(btnCancel);
         buttonPanel.Controls.Add(btnAdd);
 
-        tableLayout.Controls.Add(buttonPanel, 0, 3);
-        tableLayout.SetColumnSpan(buttonPanel, 2);
+        footerPanel.Controls.Add(buttonPanel);
+
+        contentPanel.Controls.Add(salariesPanel);
+        contentPanel.Controls.Add(inputTable);
+
+        mainPanel.Controls.Add(contentPanel);
+        mainPanel.Controls.Add(headerPanel);
+        mainPanel.Controls.Add(footerPanel);
+        Controls.Add(mainPanel);
     }
+
     private void BtnAddMonth_Click(object? sender, EventArgs e)
     {
         using var inputDialog = new Form
@@ -328,6 +351,11 @@ public partial class AddPaymentForm : Form
                 _employeeDataService.AvailableMonths.Add(newMonth);
                 _employeeDataService.AvailableMonths.Sort();
                 InitializeSalaryControls();
+                AppLogger.LogInfo(this, $"Месяц '{newMonth}' добавлен");
+            }
+            else
+            {
+                AppLogger.LogInfo(this, $"Месяц '{newMonth}' уже существует");
             }
         }
     }
@@ -391,18 +419,6 @@ public partial class AddPaymentForm : Form
         }
 
         return true;
-    }
-    public void SetAvailableMonths(List<string> months)
-    {
-        if (months == null) return;
-
-        _availableMonths = months;
-        InitializeSalaryControls();
-        if (this.Visible)
-        {
-            this.Invalidate();
-            this.Refresh();
-        }
     }
     public void UpdateAvailableMonths(List<string> newMonths)
     {
