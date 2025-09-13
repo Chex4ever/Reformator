@@ -4,12 +4,12 @@
     
     <xsl:template match="/">
         <Employees>
-            <xsl:for-each select="//item[not(@name = preceding::item/@name or @surname = preceding::item/@surname)]">
+            <xsl:for-each select="Pay/item[not(@name = preceding-sibling::item/@name and @surname = preceding-sibling::item/@surname)]">
                 <xsl:variable name="currentName" select="@name"/>
                 <xsl:variable name="currentSurname" select="@surname"/>
                 
                 <Employee name="{$currentName}" surname="{$currentSurname}">
-                    <xsl:for-each select="//item[@name = $currentName and @surname = $currentSurname]">
+                    <xsl:for-each select="/Pay/item[@name = $currentName and @surname = $currentSurname]">
                         <salary amount="{@amount}" mount="{@mount}"/>
                     </xsl:for-each>
                 </Employee>
