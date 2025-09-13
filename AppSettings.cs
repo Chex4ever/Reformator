@@ -43,7 +43,7 @@ public class Messages
 public class Titles
 {
     public string MainWindow { get; set; } = "MainWindow";
-    public string AddEmployee { get; set; } = "AddEmployee";
+    public string AddPayment { get; set; } = "AddPayment";
     public string Error { get; set; } = "Error";
     public string Information { get; set; } = "Information";
 }
@@ -54,6 +54,7 @@ public class Labels
     public string XsltFile { get; set; } = "XsltFile";
     public string OutputFile { get; set; } = "OutputFile";
     public string InputFile { get; set; } = "InputFile";
+    public string ButtonAddPayment { get; set; } = "ButtonAddPayment";
     public string ButtonAddEmployee { get; set; } = "ButtonAddEmployee";
     public string ButtonProcess { get; set; } = "ButtonProcess";
     public string ButtonExplore { get; set; } = "ButtonExplore";

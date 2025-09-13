@@ -1,12 +1,16 @@
 using System.Globalization;
+using EmployeeSalaryProcessor.Core.Contracts;
+using EmployeeSalaryProcessor.Core.Entities;
+using EmployeeSalaryProcessor.Core.Services;
 using Microsoft.Extensions.Options;
 
-namespace EmployeeSalaryProcessor;
+namespace EmployeeSalaryProcessor.Forms;
 
-public partial class AddEmployeeForm : Form
+public partial class AddPaymentForm : Form
 {
-    private readonly XmlProcessor _xmlProcessor;
     private readonly AppConfig _config;
+    private readonly IEmployeeDataService _employeeDataService;
+
     public EmployeeData? EmployeeData { get; private set; }
     private List<string> _availableMonths = [];
     private TableLayoutPanel tableLayoutSalaries = null!;
@@ -14,13 +18,16 @@ public partial class AddEmployeeForm : Form
     private TextBox txtSurname = null!;
     private Button btnAdd = null!;
     private Button btnCancel = null!;
+    private Button btnAddMonth = null!;
+    private ComboBox cmbEmployees = null!;
     private Dictionary<string, NumericUpDown> _salaryControls = [];
 
-    public AddEmployeeForm(IOptions<AppConfig> config, XmlProcessor xmlProcessor)
+    public AddPaymentForm(IOptions<AppConfig> config, IEmployeeDataService employeeDataService)
     {
-        _xmlProcessor = xmlProcessor;
+        _employeeDataService = employeeDataService;
         _config = config.Value;
         InitializeComponent();
+        LoadEmployeesAsync();
     }
 
     private void InitializeComponent()
@@ -33,6 +40,17 @@ public partial class AddEmployeeForm : Form
 
     private void InitializeControls()
     {
+        cmbEmployees = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Margin = new Padding(_config.AppSettings.PaddingSize / 2),
+            Font = new Font(_config.AppSettings.DefaultFontName, _config.AppSettings.DefaultFontSize),
+            Width = 250,
+            DisplayMember = "FullName"
+
+        };
+        cmbEmployees.SelectedIndexChanged += CmbEmployees_SelectedIndexChanged;
+
         txtName = new TextBox
         {
             PlaceholderText = _config.Labels.Name,
@@ -76,6 +94,98 @@ public partial class AddEmployeeForm : Form
             Width = 100
         };
 
+        btnAddMonth = new Button
+        {
+            Text = "Добавить месяц",
+            Margin = new Padding(_config.AppSettings.PaddingSize / 2),
+            Font = new Font(_config.AppSettings.DefaultFontName, _config.AppSettings.DefaultFontSize),
+            Width = 120
+        };
+        btnAddMonth.Click += BtnAddMonth_Click;
+
+    }
+    private async void LoadEmployeesAsync()
+    {
+        try
+        {
+            var employees = await _employeeDataService.GetAllEmployeesAsync();
+            SetEmployeeList(employees);
+            InitializeSalaryControls();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка загрузки сотрудников: {ex.Message}");
+        }
+    }
+    private async void CmbEmployees_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        if (cmbEmployees.SelectedItem?.ToString() == _config.Labels.ButtonAddEmployee)
+        {
+            ResetForm();
+            return;
+        }
+
+        if (cmbEmployees.SelectedItem is Employee selectedEmployee)
+        {
+            txtName.Text = selectedEmployee.Name;
+            txtSurname.Text = selectedEmployee.Surname;
+
+            await LoadEmployeeSalariesAsync(selectedEmployee.Name, selectedEmployee.Surname);
+        }
+    }
+
+    private async Task LoadEmployeeSalariesAsync(string name, string surname)
+    {
+        try
+        {
+            var salaries = await _employeeDataService.GetEmployeeSalariesAsync(name, surname);
+            PrefillSalaries(salaries);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка загрузки зарплат: {ex.Message}");
+        }
+    }
+    private void ResetForm()
+    {
+        txtName.Text = "";
+        txtSurname.Text = "";
+        ResetSalaryControls();
+
+        if (cmbEmployees.Items.Count > 0 && cmbEmployees.Items[0]?.ToString() == _config.Labels.ButtonAddEmployee)
+        {
+            cmbEmployees.SelectedIndex = 0;
+        }
+    }
+    private void PrefillSalaries(List<MonthSalary> salaries)
+    {
+        ResetSalaryControls();
+        foreach (var salary in salaries)
+        {
+            if (_salaryControls.ContainsKey(salary.Month))
+            {
+                _salaryControls[salary.Month].Value = salary.Amount;
+            }
+        }
+    }
+    private void ResetSalaryControls()
+    {
+        foreach (var control in _salaryControls.Values)
+        {
+            control.Value = 0;
+        }
+    }
+
+    public void SetEmployeeList(List<Employee> employees)
+    {
+        cmbEmployees.Items.Clear();
+        cmbEmployees.Items.Add(_config.Labels.ButtonAddEmployee);
+
+        foreach (var employee in employees)
+        {
+            cmbEmployees.Items.Add(employee);
+        }
+        cmbEmployees.SelectedIndex = 0;
     }
 
     private void InitializeSalaryControls()
@@ -86,9 +196,9 @@ public partial class AddEmployeeForm : Form
         _salaryControls.Clear();
 
         tableLayoutSalaries.RowCount = _availableMonths.Count;
-        for (int i = 0; i < _availableMonths.Count; i++)
+        for (int i = 0; i < _employeeDataService.AvailableMonths.Count; i++)
         {
-            var month = _availableMonths[i];
+            var month = _employeeDataService.AvailableMonths[i];
             var label = new Label
             {
                 Text = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(month) + ":",
@@ -117,7 +227,7 @@ public partial class AddEmployeeForm : Form
 
     private void SetupForm()
     {
-        Text = _config.Titles.AddEmployee;
+        Text = _config.Titles.AddPayment;
         ClientSize = new Size(400, 500);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -190,6 +300,37 @@ public partial class AddEmployeeForm : Form
         tableLayout.Controls.Add(buttonPanel, 0, 3);
         tableLayout.SetColumnSpan(buttonPanel, 2);
     }
+    private void BtnAddMonth_Click(object? sender, EventArgs e)
+    {
+        using var inputDialog = new Form
+        {
+            Text = "Добавить новый месяц",
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            StartPosition = FormStartPosition.CenterParent,
+            Width = 300,
+            Height = 150
+        };
+
+        var textBox = new TextBox { Width = 200, Top = 20, Left = 50 };
+        var btnOk = new Button { Text = "OK", DialogResult = DialogResult.OK, Top = 60, Left = 80 };
+        var btnCancel = new Button { Text = "Отмена", DialogResult = DialogResult.Cancel, Top = 60, Left = 160 };
+
+        inputDialog.Controls.AddRange([textBox, btnOk, btnCancel]);
+        inputDialog.AcceptButton = btnOk;
+        inputDialog.CancelButton = btnCancel;
+
+        if (inputDialog.ShowDialog() == DialogResult.OK && !string.IsNullOrWhiteSpace(textBox.Text))
+        {
+            string newMonth = textBox.Text.Trim().ToLower();
+
+            if (!_employeeDataService.AvailableMonths.Contains(newMonth))
+            {
+                _employeeDataService.AvailableMonths.Add(newMonth);
+                _employeeDataService.AvailableMonths.Sort();
+                InitializeSalaryControls();
+            }
+        }
+    }
 
     private void BtnAdd_Click(object? sender, EventArgs? e)
     {
@@ -257,6 +398,11 @@ public partial class AddEmployeeForm : Form
 
         _availableMonths = months;
         InitializeSalaryControls();
+        if (this.Visible)
+        {
+            this.Invalidate();
+            this.Refresh();
+        }
     }
     public void UpdateAvailableMonths(List<string> newMonths)
     {

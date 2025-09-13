@@ -1,13 +1,16 @@
 using System.Globalization;
 using System.Xml.Linq;
 using System.Xml.Xsl;
+using EmployeeSalaryProcessor.Core.Contracts;
+using EmployeeSalaryProcessor.Core.Entities;
+using EmployeeSalaryProcessor.Core.Utilities;
 using Microsoft.Extensions.Options;
 
-namespace EmployeeSalaryProcessor;
+namespace EmployeeSalaryProcessor.Core.Services;
 
-// TODO - Violation of SRP
-// TODO - много строковых литералов
-public class XmlProcessor(IOptions<AppConfig> config)
+// TODO: Violation of SRP
+// TODO: много строковых литералов
+public class XmlProcessor(IOptions<AppConfig> config) : IXmlProcessor
 {
     private readonly AppConfig _config = config.Value;
 
@@ -27,20 +30,15 @@ public class XmlProcessor(IOptions<AppConfig> config)
     }
     public void TransformXml(string inputFilePath, string xsltFilePath, string outputFilePath)
     {
-        if (string.IsNullOrEmpty(inputFilePath))
-            throw new ArgumentException("Input file path cannot be null or empty", nameof(inputFilePath));
-        if (string.IsNullOrEmpty(xsltFilePath))
-            throw new ArgumentException("XSLT file path cannot be null or empty", nameof(xsltFilePath));
+        ValidateAndEnsureFileDirectory(inputFilePath, nameof(inputFilePath));
+        ValidateAndEnsureFileDirectory(xsltFilePath, nameof(xsltFilePath));
         if (string.IsNullOrEmpty(outputFilePath))
             throw new ArgumentException("Output file path cannot be null or empty", nameof(outputFilePath));
-        if (!File.Exists(inputFilePath))
-            throw new FileNotFoundException("Input file not found", inputFilePath);
-        if (!File.Exists(xsltFilePath))
-            throw new FileNotFoundException("XSLT file not found", xsltFilePath);
 
 
         try
         {
+            FileSystemHelper.EnsureDirectoryExists(outputFilePath);
             var xslt = new XslCompiledTransform();
             xslt.Load(xsltFilePath);
             xslt.Transform(inputFilePath, outputFilePath);
@@ -53,11 +51,7 @@ public class XmlProcessor(IOptions<AppConfig> config)
 
     public void AddTotalSalaryToEmployees(string xmlFilePath)
     {
-        if (string.IsNullOrEmpty(xmlFilePath))
-            throw new ArgumentException("File path cannot be null or empty", nameof(xmlFilePath));
-        if (!File.Exists(xmlFilePath))
-            throw new FileNotFoundException("File not found", xmlFilePath);
-
+        ValidateAndEnsureFileDirectory(xmlFilePath, nameof(xmlFilePath));
         try
         {
             XDocument doc = XDocument.Load(xmlFilePath);
@@ -79,11 +73,7 @@ public class XmlProcessor(IOptions<AppConfig> config)
 
     public void AddTotalAmountToData(string xmlFilePath)
     {
-        if (string.IsNullOrEmpty(xmlFilePath))
-            throw new ArgumentException("Source file path cannot be null or empty", nameof(xmlFilePath));
-        if (!File.Exists(xmlFilePath))
-            throw new FileNotFoundException("Source file not found", xmlFilePath);
-
+        ValidateAndEnsureFileDirectory(xmlFilePath, nameof(xmlFilePath));
         try
         {
             XDocument doc = XDocument.Load(xmlFilePath);
@@ -101,13 +91,9 @@ public class XmlProcessor(IOptions<AppConfig> config)
 
     public void AddPaymentToData(string xmlFilePath, EmployeeData employeeData)
     {
-        if (string.IsNullOrEmpty(xmlFilePath))
-            throw new ArgumentException("Data file path cannot be null or empty", nameof(xmlFilePath));
+        ValidateAndEnsureFileDirectory(xmlFilePath, nameof(xmlFilePath));
         if (employeeData == null)
             throw new ArgumentNullException(nameof(employeeData));
-        if (!File.Exists(xmlFilePath))
-            throw new FileNotFoundException("Data file not found", xmlFilePath);
-
         try
         {
             XDocument doc = XDocument.Load(xmlFilePath);
@@ -119,6 +105,7 @@ public class XmlProcessor(IOptions<AppConfig> config)
 
             foreach (var salary in employeeData.Salaries)
             {
+                if (salary.Amount == 0) continue;
                 payElement.Add(new XElement("item",
                     new XAttribute("name", employeeData.Name),
                     new XAttribute("surname", employeeData.Surname),
@@ -135,13 +122,11 @@ public class XmlProcessor(IOptions<AppConfig> config)
         }
     }
 
-    public IEnumerable<EmployeeDisplayData> GetEmployeeDisplayData(string xmlFilePath)
+    public List<EmployeeDisplayData> GetEmployeeDisplayData(string xmlFilePath)
     {
-        if (string.IsNullOrEmpty(xmlFilePath))
-            throw new ArgumentException("File path cannot be null or empty", nameof(xmlFilePath));
-        if (!File.Exists(xmlFilePath))
-            throw new FileNotFoundException("File not found", xmlFilePath);
+        AppLogger.LogDebug($"GetEmployeeDisplayData started for: {xmlFilePath}");
 
+        ValidateAndEnsureFileDirectory(xmlFilePath, nameof(xmlFilePath));
         try
         {
             XDocument doc = XDocument.Load(xmlFilePath);
@@ -154,11 +139,15 @@ public class XmlProcessor(IOptions<AppConfig> config)
                 .OrderBy(m => m)
                 .ToList();
 
+            AppLogger.LogDebug($"Found {allMonths.Count} unique months");
+
             foreach (var employee in doc.Descendants("Employee"))
             {
                 string name = employee.Attribute("name")?.Value ?? "Unknown";
                 string surname = employee.Attribute("surname")?.Value ?? "Unknown";
                 string totalSalary = employee.Attribute("totalSalary")?.Value ?? "0";
+
+                AppLogger.LogDebug($"Processing employee: {name} {surname}");
 
                 var monthlySalaries = allMonths.ToDictionary(
                     month => month ?? throw new InvalidOperationException("allMonths.ToDictionary error"),
@@ -167,6 +156,10 @@ public class XmlProcessor(IOptions<AppConfig> config)
                         .Attribute("amount")?.Value ?? "0"
                 );
 
+                foreach (var monthSalary in monthlySalaries)
+                {
+                    AppLogger.LogDebug($"  {monthSalary.Key}: {monthSalary.Value}");
+                }
                 employees.Add(new EmployeeDisplayData
                 {
                     FullName = $"{name} {surname}",
@@ -174,17 +167,21 @@ public class XmlProcessor(IOptions<AppConfig> config)
                     TotalSalary = totalSalary
                 });
             }
-
+            AppLogger.LogDebug($"GetEmployeeDisplayData completed: {employees.Count} employees");
             return employees;
         }
         catch (Exception ex)
         {
+            AppLogger.LogError("GetEmployeeDisplayData failed", ex);
+
             throw new InvalidOperationException($"Failed to get employee data: {ex.Message}", ex);
         }
     }
 
     public List<string> GetAllMonths(string xmlFilePath)
     {
+        ValidateAndEnsureFileDirectory(xmlFilePath, nameof(xmlFilePath));
+
         try
         {
             XDocument doc = XDocument.Load(xmlFilePath);
@@ -201,22 +198,59 @@ public class XmlProcessor(IOptions<AppConfig> config)
 
         }
     }
-}
+    public List<Employee> GetAllEmployees(string xmlFilePath)
+    {
+        ValidateAndEnsureFileDirectory(xmlFilePath, nameof(xmlFilePath));
+        try
+        {
+            XDocument doc = XDocument.Load(xmlFilePath);
+            return doc.Descendants("item")
+            .Select(item => new Employee
+            {
+                Name = item.Attribute("name")?.Value ?? "Unknown",
+                Surname = item.Attribute("surname")?.Value ?? "Unknown"
+            })
+            .GroupBy(e => new { e.Name, e.Surname })
+            .Select(g => g.First())
+            .OrderBy(e => e.Surname)
+            .ThenBy(e => e.Name)
+            .ToList();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to get employees: {ex.Message}", ex);
+        }
+    }
 
-public class EmployeeData
-{
-    public string Name { get; set; } = string.Empty;
-    public string Surname { get; set; } = string.Empty;
-    public List<MonthSalary> Salaries { get; set; } = [];
-}
-public class MonthSalary
-{
-    public string Month { get; set; } = string.Empty;
-    public decimal Amount { get; set; }
-}
-public class EmployeeDisplayData
-{
-    public string FullName { get; set; } = string.Empty;
-    public Dictionary<string, string> MonthlySalaries { get; set; } = new Dictionary<string, string>();
-    public string TotalSalary { get; set; } = string.Empty;
+    public List<MonthSalary> GetEmployeeSalaries(string xmlFilePath, string name, string surname)
+    {
+        try
+        {
+            XDocument doc = XDocument.Load(xmlFilePath);
+            return doc.Descendants("item")
+                .Where(item => item.Attribute("name")?.Value == name &&
+                              item.Attribute("surname")?.Value == surname)
+                .Select(item => new MonthSalary
+                {
+                    Month = item.Attribute("mount")?.Value ?? "",
+                    Amount = ParseAmount(item.Attribute("amount")?.Value)
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to get employee salaries: {ex.Message}", ex);
+        }
+    }
+    private static void ValidateAndEnsureFileDirectory(string filePath, string paramName = "filePath")
+    {
+        if (string.IsNullOrEmpty(filePath))
+            throw new ArgumentException("File path cannot be null or empty", paramName);
+
+        if (!File.Exists(filePath))
+            throw new FileNotFoundException("File not found", filePath);
+
+        FileSystemHelper.EnsureDirectoryExists(filePath);
+    }
+
 }
