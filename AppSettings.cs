@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace EmployeeSalaryProcessor;
 
 public class AppSettings
@@ -7,7 +5,6 @@ public class AppSettings
     public string DefaultInputFile { get; set; } = "";
     public string DefaultOutputFile { get; set; } = "";
     public string DefaultXsltFile { get; set; } = "";
-    public string CorrectedXsltFile { get; set; } = "";
     public string DefaultFontName { get; set; } = "Segoe UI";
     public float DefaultFontSize { get; set; } = 10F;
     public decimal MinSalary { get; set; } = 0;

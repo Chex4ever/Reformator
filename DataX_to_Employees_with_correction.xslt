@@ -12,7 +12,6 @@
                     <xsl:for-each select="//item[@name = $currentName and @surname = $currentSurname]">
                         <xsl:variable name="correctMount">
                             <xsl:choose>
-                                <!-- Если mount не соответствует родительскому элементу, исправляем -->
                                 <xsl:when test="name(..) != 'Pay' and name(..) != @mount">
                                     <xsl:value-of select="name(..)"/>
                                 </xsl:when>

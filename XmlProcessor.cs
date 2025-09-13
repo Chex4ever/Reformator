@@ -3,26 +3,27 @@ using System.Xml.Linq;
 using System.Xml.Xsl;
 using Microsoft.Extensions.Options;
 
-
 namespace EmployeeSalaryProcessor;
 
+// TODO - Violation of SRP
+// TODO - много строковых литералов
 public class XmlProcessor(IOptions<AppConfig> config)
 {
     private readonly AppConfig _config = config.Value;
 
-    public double ParseAmount(string? amountStr)
+    public decimal ParseAmount(string? amountStr)
     {
         if (string.IsNullOrEmpty(amountStr))
-            return (double)_config.AppSettings.MinSalary;
+            return _config.AppSettings.MinSalary;
 
         amountStr = amountStr.Replace(",", ".").Replace(" ", "");
 
-        if (double.TryParse(amountStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double result))
+        if (decimal.TryParse(amountStr, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal result))
         {
             return result;
         }
 
-        return (double)_config.AppSettings.MinSalary;
+        return _config.AppSettings.MinSalary;
     }
     public void TransformXml(string inputFilePath, string xsltFilePath, string outputFilePath)
     {
@@ -63,7 +64,7 @@ public class XmlProcessor(IOptions<AppConfig> config)
 
             foreach (var employee in doc.Descendants("Employee"))
             {
-                double total = employee.Descendants("salary")
+                decimal total = employee.Descendants("salary")
                 .Sum(salary => ParseAmount(salary.Attribute("amount")?.Value));
                 employee.SetAttributeValue("totalSalary", total.ToString("F2", CultureInfo.InvariantCulture));
             }
@@ -86,7 +87,7 @@ public class XmlProcessor(IOptions<AppConfig> config)
         try
         {
             XDocument doc = XDocument.Load(xmlFilePath);
-            double total = doc.Descendants("item")
+            decimal total = doc.Descendants("item")
                 .Sum(item => ParseAmount(item.Attribute("amount")?.Value));
             doc.Descendants("Pay").First()
                 .SetAttributeValue("totalAmount", total.ToString("F2", CultureInfo.InvariantCulture));
@@ -206,7 +207,7 @@ public class EmployeeData
 {
     public string Name { get; set; } = string.Empty;
     public string Surname { get; set; } = string.Empty;
-    public List<MonthSalary> Salaries { get; set; } = new List<MonthSalary>();
+    public List<MonthSalary> Salaries { get; set; } = [];
 }
 public class MonthSalary
 {

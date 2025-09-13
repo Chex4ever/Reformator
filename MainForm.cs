@@ -246,15 +246,16 @@ public partial class MainForm : Form
 
         try
         {
-            _xmlProcessor.TransformXml(txtInputFile.Text, txtXsltFile.Text, txtOutputFile!.Text);
+            _xmlProcessor.TransformXml(txtInputFile.Text, txtXsltFile.Text, txtOutputFile.Text);
             _xmlProcessor.AddTotalSalaryToEmployees(txtOutputFile.Text);
+            _xmlProcessor.AddTotalAmountToData(txtInputFile.Text);
             _availableMonths = _xmlProcessor.GetAllMonths(txtOutputFile.Text);
 
             DisplayEmployeeData(txtOutputFile.Text);
 
             MessageBox.Show(
-               _config.Messages.ProcessingComplete,
-               _config.Titles.Information,
+                _config.Messages.ProcessingComplete,
+                _config.Titles.Information,
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information
             );
@@ -263,7 +264,7 @@ public partial class MainForm : Form
         {
             MessageBox.Show(
                 $"{_config.Titles.Error}: {ex.Message}",
-               _config.Titles.Error,
+                _config.Titles.Error,
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error
             );
@@ -288,7 +289,7 @@ public partial class MainForm : Form
         {
             MessageBox.Show(
                 $"{_config.Messages.AddPaymentError}: {ex.Message}",
-               _config.Titles.Error,
+                _config.Titles.Error,
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error
             );
@@ -335,11 +336,3 @@ public partial class MainForm : Form
     }
 
 }
-// public static class ControlExtensions
-// {
-//     public static T WithClickHandler<T>(this T control, EventHandler handler) where T : Control
-//     {
-//         control.Click += handler;
-//         return control;
-//     }
-// }
