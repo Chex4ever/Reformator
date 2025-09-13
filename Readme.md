@@ -47,7 +47,7 @@ EmployeeSalaryProcessor/
 
 1. **Клонирование репозитория**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/Chex4ever/Reformator
    cd EmployeeSalaryProcessor
    ```
 
